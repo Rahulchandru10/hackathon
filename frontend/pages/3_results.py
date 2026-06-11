@@ -57,10 +57,15 @@ else:
         "📝 Recommendations & QA Challenge"
     ])
     
+    low_boundary = st.session_state.get("saved_low_med", 20)
+    med_boundary = st.session_state.get("saved_med_high", 50)
+    high_boundary = st.session_state.get("saved_high_crit", 75)
+    current_risk_score = int(case.get("risk_score", 0))
+    
     with tab_articles:
         st.markdown("### Screened Media Articles")
         articles_data = []
-        if case.get("risk_score", 0) > 20:
+        if current_risk_score >= low_boundary:
             articles_data.append({
                 "title": f"Regulatory inquiry focused on {entity.get('name')} compliance failures",
                 "source": "Reuters",
@@ -91,20 +96,18 @@ else:
     with tab_watchlists:
         st.markdown("### PEP & Sanctions Screening Matches")
         st.markdown("##### Politically Exposed Persons (PEP)")
-        if case.get("risk_score", 0) > 50:
+        if current_risk_score >= med_boundary:
             st.warning(f"⚠️ **Match Found**: Associate of {entity.get('name')} mapped as high-level regulatory proxy.")
             st.write("- **Confidence**: 85%")
             st.write("- **Role**: Government advisor / proxy officer")
-            st.write("- **Justification**: Target name and country matches regional administrative PEP lists.")
         else:
             st.success("No active PEP matches identified.")
 
         st.markdown("##### Sanctions Watchlists")
-        if case.get("risk_score", 0) > 75:
+        if current_risk_score >= high_boundary:
             st.error(f"🚨 **Match Found**: OFAC SDN list match detected for {entity.get('name')}.")
             st.write("- **Confidence**: 92%")
             st.write("- **List**: US OFAC, EU Sanctions List")
-            st.write("- **Justification**: Cross-border funds freeze list matching company registration ID.")
         else:
             st.success("No active sanctions listings detected.")
 
@@ -134,13 +137,10 @@ else:
             submitted = st.form_submit_button("Submit Analyst Decision")
             
             if submitted:
-                payload = {
-                    "status": status_opt,
-                    "recommendation": rec_opt,
-                    "notes": notes
-                }
+                payload = {"status": status_opt, "recommendation": rec_opt, "notes": notes}
                 try:
-                    asyncio.run(api_client.update_case(case_id, payload))
+                    async with api_client:
+                        await api_client.update_case(case_id, payload)
                     st.success("Case successfully updated and audit log appended.")
                     st.rerun()
                 except Exception as e:

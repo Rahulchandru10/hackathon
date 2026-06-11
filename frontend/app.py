@@ -64,6 +64,25 @@ def main():
         st.session_state.token = None
     if "selected_case_id" not in st.session_state:
         st.session_state.selected_case_id = None
+        
+    # ─── PERSISTENT CONFIGURATION NAMESPACE STORAGE ─────────────────────────
+    if "saved_ollama_url" not in st.session_state:
+        st.session_state.saved_ollama_url = "http://127.0.0.1:11434"
+    if "saved_primary_llm" not in st.session_state:
+        st.session_state.saved_primary_llm = "mistral"
+    if "saved_embedding_model" not in st.session_state:
+        st.session_state.saved_embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+    if "saved_serper_key" not in st.session_state:
+        st.session_state.saved_serper_key = ""
+        
+    if "saved_low_med" not in st.session_state:
+        st.session_state.saved_low_med = 20
+    if "saved_med_high" not in st.session_state:
+        st.session_state.saved_med_high = 50
+    if "saved_high_crit" not in st.session_state:
+        st.session_state.saved_high_crit = 75
+    if "saved_media_rel" not in st.session_state:
+        st.session_state.saved_media_rel = 30
 
     if not st.session_state.token:
         show_login()
@@ -93,8 +112,7 @@ def main():
             4. **Network Graph** — Explore Neo4j interactive entity relationships and corporate networks.
             5. **Investigation Copilot** — Chat interactively with the RAG-backed case investigator.
             6. **Reports** — Generate and download official PDF compliance summaries.
-            7. **Monitoring** — Manage periodic subscription configurations and system alerts.
-            8. **Administration** — Configure server instances, models, and compliance parameters.
+            7. **Administration** — Configure server instances, models, and compliance parameters.
         """)
 
 if __name__ == "__main__":

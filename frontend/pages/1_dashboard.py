@@ -24,8 +24,11 @@ async def load_dashboard_data():
 
 cases, alerts = asyncio.run(load_dashboard_data())
 
+# Read directly from protected namespace storage keys
+med_high_boundary = st.session_state.get("saved_med_high", 50)
+
 total_cases = len(cases)
-high_risk_cases = len([c for c in cases if c.get("risk_score", 0) > 50])
+high_risk_cases = len([c for c in cases if int(c.get("risk_score", 0)) >= med_high_boundary])
 open_alerts = len([a for a in alerts if not a.get("is_read", False)])
 
 col1, col2, col3 = st.columns(3)

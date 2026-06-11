@@ -2,6 +2,7 @@ import streamlit as st
 import asyncio
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.api_client import api_client
@@ -67,14 +68,32 @@ with st.form("screening_form"):
                     st.success("Screening successfully completed!")
                     st.session_state.selected_case_id = result["case_id"]
                     
+                    st.markdown("---")
+                    st.markdown("#### 📊 Screening Result Summary")
+                    
+                    low_med_boundary = st.session_state.get("saved_low_med", 20)
+                    med_high_boundary = st.session_state.get("saved_med_high", 50)
+                    high_crit_boundary = st.session_state.get("saved_high_crit", 75)
+                    risk_score = int(result.get("risk_score", 0))
+                    
+                    if risk_score >= high_crit_boundary:
+                        st.error(f"🚨 **CRITICAL RISK LEVEL DETECTED** (Score: {risk_score}/100)")
+                    elif risk_score >= med_high_boundary:
+                        st.error(f"🔴 **HIGH RISK LEVEL** (Score: {risk_score}/100)")
+                    elif risk_score >= low_med_boundary:
+                        st.warning(f"🟡 **MEDIUM RISK LEVEL** (Score: {risk_score}/100)")
+                    else:
+                        st.success(f"🟢 **LOW RISK LEVEL** (Score: {risk_score}/100)")
+                    
                     st.markdown(f"**Case Assigned ID:** `{result['case_id']}`")
-                    st.markdown(f"**Risk Score:** `{result['risk_score']}/100`")
-                    st.markdown(f"**Recommendation:** `{result['recommendation']}`")
+                    st.markdown(f"**System Recommendation:** {result['recommendation']}")
                     
                     if result.get("warnings"):
+                        st.markdown("##### System Alerts:")
                         for warn in result["warnings"]:
                             st.warning(warn)
                             
-                    st.info("Navigate to the Results tab to view timeline events and adverse articles.")
+                    st.markdown("---")
+                    st.info("💡 Navigate to the Results or Network Graph tabs to explore detail trees.")
                 except Exception as e:
                     st.error(f"Screening execution failed: {e}")

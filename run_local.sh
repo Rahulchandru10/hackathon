@@ -33,7 +33,7 @@ PROJECT_ROOT=$(pwd)
 echo -e "${CYAN}
 +----------------------------------------------+
 |      Project Sentinel - Local Launcher       |
-|            SQLite + In-Memory Mode            |
+|      Cloud Integration + AI Ingestion Mode   |
 +----------------------------------------------+
 ${NC}"
 
@@ -46,7 +46,6 @@ SEARCH_LIST=("python3" "python" "python3.12" "python3.11" "python3.10" "python3.
 
 for cmd in "${SEARCH_LIST[@]}"; do
     if command -v "$cmd" >/dev/null 2>&1; then
-        # Extract version major.minor
         VER=$("$cmd" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null)
         if [[ "$VER" =~ ^3\.(9|1[0-5])$ ]]; then
             PYTHON_CMD=$(command -v "$cmd")
@@ -64,11 +63,9 @@ fi
 # -- Step 2: Check, Install, and Serve Ollama --------------------------------
 echo -e "${YELLOW}[2/5] Checking Ollama Infrastructure...${NC}"
 
-# 1. Check if Ollama command exists; if missing, install it along with zstd
 if ! command -v ollama >/dev/null 2>&1; then
     echo -e "  ${YELLOW}[WARN] Ollama executable not found. Starting automatic native environment build...${NC}"
     
-    # Check if user is root/sudo capable
     if [ "$(id -u)" -ne 0 ]; then
         echo -e "  ${RED}[FAIL] System requires root privileges to configure zstd and install Ollama.${NC}"
         exit 1
@@ -82,7 +79,6 @@ if ! command -v ollama >/dev/null 2>&1; then
     echo -e "  ${GREEN}[OK] Ollama base binary engine successfully compiled.${NC}"
 fi
 
-# 2. Check if the server daemon is awake; if sleeping, spin it up
 set +e
 curl -s -f http://localhost:11434/api/tags > /dev/null
 OLLAMA_STATUS=$?
@@ -94,7 +90,6 @@ if [ $OLLAMA_STATUS -ne 0 ]; then
     sleep 5
 fi
 
-# 3. Double check runtime heartbeat status and pre-stage your target model weights
 set +e
 curl -s -f http://localhost:11434/api/tags > /dev/null
 OLLAMA_HEARTBEAT=$?
@@ -125,21 +120,33 @@ PYTHON_EXE="$VENV_PATH/bin/python"
 if [ "$SKIP_INSTALL" = false ]; then
     echo -e "${YELLOW}[4/5] Installing backend dependencies...${NC}"
     "$PIP_CMD" install -r "$PROJECT_ROOT/backend/requirements.txt" -q
+    
+    # Explicitly verify the asymmetric Ollama python library dependency is mapped
+    "$PIP_CMD" install ollama -q
+    
     echo -e "  ${GRAY}Installing frontend dependencies...${NC}"
     "$PIP_CMD" install -r "$PROJECT_ROOT/frontend/requirements.txt" -q
-    echo -e "  ${GREEN}[OK] Dependencies installed.${NC}"
+    echo -e "  ${GREEN}[OK] Dependencies verified and fully updated.${NC}"
 else
     echo -e "${GRAY}[4/5] Skipping dependency install (--skip-install flag).${NC}"
 fi
 
-# -- Step 5: Copy local env ---------------------------------------------------
+# -- Step 5: Copy/Validate Environment Variables ------------------------------
 echo -e "${YELLOW}[5/5] Configuring environment...${NC}"
 ENV_TARGET="$PROJECT_ROOT/.env"
+
 if [ ! -f "$ENV_TARGET" ]; then
     cp "$PROJECT_ROOT/.env.local" "$ENV_TARGET"
-    echo -e "  ${GREEN}[OK] Created .env from .env.local (LOCAL_MODE=true)${NC}"
+    echo -e "  ${GREEN}[OK] Created baseline .env file from template.${NC}"
 else
-    echo -e "  ${GREEN}[OK] Using existing .env${NC}"
+    echo -e "  ${GREEN}[OK] Verified existing .env configuration presence.${NC}"
+fi
+
+# Sanity check validation rule to prevent running with bad user data
+if grep -q "NEO4J_USER=neo4j" "$ENV_TARGET" 2>/dev/null && grep -q "29b956f8" "$ENV_TARGET" 2>/dev/null; then
+    echo -e "  ${YELLOW}[⚠️] Notice: Mismatched default username found. Automatically aligning variable targets...${NC}"
+    # Use standard sed pattern matching variables safely across file writes
+    sed -i 's/NEO4J_USER=neo4j/NEO4J_USER=29b956f8/g' "$ENV_TARGET"
 fi
 
 echo ""
@@ -147,19 +154,16 @@ echo -e "${GRAY}===============================================${NC}"
 echo -e "${CYAN} Starting Services...${NC}"
 echo -e "${GRAY}===============================================${NC}"
 
-# Variables to store Process IDs
 BACKEND_PID=""
 FRONTEND_PID=""
 
-# Cleanup function to kill background jobs on Ctrl+C
 cleanup() {
-    echo -e "\n${YELLOW}Stopping services...${NC}"
+    echo -e "\n${YELLOW}Stopping background platform service daemons...${NC}"
     if [ -n "$BACKEND_PID" ]; then kill $BACKEND_PID 2>/dev/null || true; fi
     if [ -n "$FRONTEND_PID" ]; then kill $FRONTEND_PID 2>/dev/null || true; fi
     exit 0
 }
 
-# Trap SIGINT (Ctrl+C) and SIGTERM to run cleanup
 trap cleanup SIGINT SIGTERM
 
 # -- Launch Backend ----------------------------------------------------------
@@ -189,7 +193,7 @@ fi
 
 echo ""
 echo -e "${GRAY}===============================================${NC}"
-echo -e " ${GREEN}[OK] Project Sentinel is running!${NC}"
+echo -e " ${GREEN}[OK] Project Sentinel Stack is completely active!${NC}"
 echo ""
 echo -e "   ${WHITE}Frontend  -->  http://localhost:8501${NC}"
 echo -e "   ${WHITE}Backend   -->  http://localhost:8000${NC}"
@@ -200,5 +204,4 @@ echo ""
 echo -e "   ${GRAY}Press Ctrl+C to stop all services.${NC}"
 echo -e "${GRAY}===============================================${NC}"
 
-# Safely wait for background processes to keep the execution wrapper open
 wait $BACKEND_PID $FRONTEND_PID

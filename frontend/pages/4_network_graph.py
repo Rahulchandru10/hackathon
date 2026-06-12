@@ -3,7 +3,8 @@ import asyncio
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ✅ FIXED: Moves up 3 levels (pages -> frontend -> workspace root) so Python can see 'backend' and 'utils'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from utils.api_client import api_client
 from utils.styles import apply_custom_styles
@@ -17,8 +18,82 @@ st.markdown("---")
 case_id = st.session_state.get("selected_case_id")
 
 if not case_id:
-    st.info("No active case context. Please select a case from the Dashboard or run a new Screening query.")
+    st.info("💡 No active case context selected. Fetching global infrastructure network layout directly from the database...")
+    
+    async def load_entire_system_graph():
+        # ✅ CLEAN ARCHITECTURE: Fetching network information dynamically over HTTP via the API Client
+        return await api_client.get_network(entity_id="global")
+
+    with st.spinner("Compiling global network topologies..."):
+        try:
+            raw_records = asyncio.run(load_entire_system_graph())
+            
+            formatted_nodes = []
+            formatted_edges = []
+            processed_node_ids = set()
+            processed_edge_ids = set()
+
+            if not raw_records:
+                st.warning("The graph database is currently responsive but contains zero nodes or structural indices.")
+            else:
+                for idx, record in enumerate(raw_records):
+                    node_n = record.get("n")
+                    node_m = record.get("m")
+                    rel_r = record.get("r")
+
+                    # Format Base Node A
+                    if node_n and node_n.id not in processed_node_ids:
+                        processed_node_ids.add(node_n.id)
+                        labels = list(node_n.labels)
+                        label_str = labels[0] if labels else "Entity"
+                        name = node_n.get("name", node_n.get("title", f"ID: {node_n.id}"))
+                        
+                        formatted_nodes.append({
+                            "id": str(node_n.id),
+                            "label": f"📦 {name}",
+                            "color": "#38bdf8",
+                            "background": "#38bdf8",
+                            "fill": "#38bdf8",
+                            "size": 20,
+                            "title": f"Type: {label_str}"
+                        })
+
+                    # Format Optional Targeted Node B
+                    if node_m and node_m.id not in processed_node_ids:
+                        processed_node_ids.add(node_m.id)
+                        labels = list(node_m.labels)
+                        label_str = labels[0] if labels else "Entity"
+                        name = node_m.get("name", node_m.get("title", f"ID: {node_m.id}"))
+                        
+                        formatted_nodes.append({
+                            "id": str(node_m.id),
+                            "label": f"📦 {name}",
+                            "color": "#c084fc",
+                            "background": "#c084fc",
+                            "fill": "#c084fc",
+                            "size": 20,
+                            "title": f"Type: {label_str}"
+                        })
+
+                    # Format Relationship Linking Edges
+                    if rel_r:
+                        edge_key = f"{node_n.id}-{rel_r.type}-{node_m.id}"
+                        if edge_key not in processed_edge_ids:
+                            processed_edge_ids.add(edge_key)
+                            formatted_edges.append({
+                                "from": str(node_n.id),
+                                "to": str(node_m.id),
+                                "label": rel_r.type,
+                                "length": 250
+                            })
+
+                render_network_graph(formatted_nodes, formatted_edges)
+
+        except Exception as e:
+            st.error(f"Failed to compile dynamic colored relationship layers: {e}")
+
 else:
+    # ─── CASE-SPECIFIC SEGMENT (Original Targeted View) ───────────────────
     async def load_full_case_context():
         return await api_client.get_case(case_id)
 
@@ -33,31 +108,28 @@ else:
             st.subheader(f"Relationship Graph Context: {case_name}")
             st.caption(f"Active Compliance Track ID: {case_id}")
 
-            # Extract user intake arrays or resolved database items
             directors = entity_details.get("directors", [])
             ubos = entity_details.get("beneficial_owners", [])
             shareholders = entity_details.get("shareholders", [])
             subsidiaries = entity_details.get("subsidiaries", [])
             parent_co = entity_details.get("parent_company", None)
-            
             articles = case.get("articles", [])
 
             formatted_nodes = []
             formatted_edges = []
 
-            # ─── 1. PRIMARY TARGET (Crimson Red: #F5332C) ───────────────────
+            # Primary Target (Crimson Red)
             formatted_nodes.append({
                 "id": "target",
                 "label": f"🎯 {case_name}",
                 "color": "#F5332C",
-                "background": "#F5332C",  # Dual binding mapping for cross-component safety
+                "background": "#F5332C",
                 "fill": "#F5332C",
                 "size": 35,
-                "mass": 4,  # Pushes all peripheral nodes outward away from center
+                "mass": 4,
                 "title": f"Primary Target | Risk Score: {risk_score}/100"
             })
 
-            # ─── 2. DIRECTORS / CORPORATE PERSONS (Corporate Blue: #38bdf8) ──
             if parent_co:
                 formatted_nodes.append({
                     "id": "parent", 
@@ -97,7 +169,6 @@ else:
                 })
                 formatted_edges.append({"from": "target", "to": nid, "label": "SUBSIDIARY_OF", "length": 280})
 
-            # ─── 3. UBOs / BENEFICIAL OWNERS (Bright Purple: #c084fc) ───────
             for idx, item in enumerate(ubos or []):
                 nid = f"ubo_{idx}"
                 formatted_nodes.append({
@@ -108,7 +179,6 @@ else:
                 })
                 formatted_edges.append({"from": nid, "to": "target", "label": "ULTIMATE_UBO", "length": 280})
 
-            # ─── 4. ADVERSE ARTICLES (Amber Yellow: #facc15) ─────────────────
             if not articles:
                 fallback_articles = [
                     {"id": "art_1", "title": "Reuters:\nCompliance Failures", "source": "Reuters"},
@@ -140,7 +210,6 @@ else:
                     })
                     formatted_edges.append({"from": "target", "to": nid, "label": "MENTIONED_IN", "length": 340})
 
-            # ─── 5. SANCTIONS / WATCHLISTS (Coral Red: #f87171) ─────────────
             if risk_score >= 30:
                 formatted_nodes.append({
                     "id": "sanctions_freeze_node",
@@ -149,10 +218,8 @@ else:
                     "size": 26,
                     "title": "Watchlist threat enforcement match detected."
                 })
-                # Maximum length pushes this dangerous risk node far outward into space
                 formatted_edges.append({"from": "target", "to": "sanctions_freeze_node", "label": "SANCTIONS_EXPOSURE", "length": 380})
 
-            # Hand the explicitly colored, loose length parameters to your rendering component
             render_network_graph(formatted_nodes, formatted_edges)
 
         except Exception as e:

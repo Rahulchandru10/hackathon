@@ -2,6 +2,7 @@ import streamlit as st
 import asyncio
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.api_client import api_client
@@ -10,11 +11,13 @@ from components.risk_gauge import render_risk_gauge
 from components.timeline_view import render_timeline
 from components.article_card import render_article_card
 
+# Apply Project Sentinel premium UI styles
 apply_custom_styles()
 
 st.markdown('<div class="sentinel-title">📊 Case Audit & Screening Results</div>', unsafe_allow_html=True)
 st.markdown("---")
 
+# Extract the active context tracking token
 case_id = st.session_state.get("selected_case_id")
 
 if not case_id:
@@ -33,7 +36,7 @@ else:
         st.stop()
 
     entity = case.get("entity", {})
-    st.subheader(f"Case Context: {entity.get('name')} ({case.get('id')})")
+    st.subheader(f"Case Context: {entity.get('name', 'Unknown Target')} ({case.get('id', case_id)})")
     
     col1, col2 = st.columns([1, 1])
     
@@ -50,6 +53,7 @@ else:
 
     st.markdown("---")
     
+    # Render Forensic Investigation Tabs
     tab_articles, tab_timeline, tab_watchlists, tab_decisions = st.tabs([
         "📰 Adverse Media Articles", 
         "⏳ Event Timeline", 
@@ -64,30 +68,24 @@ else:
     
     with tab_articles:
         st.markdown("### Screened Media Articles")
-        articles_data = []
-        if current_risk_score >= low_boundary:
-            articles_data.append({
-                "title": f"Regulatory inquiry focused on {entity.get('name')} compliance failures",
-                "source": "Reuters",
-                "source_tier": 1,
-                "credibility_score": 98,
-                "summary": f"Finance watchdogs launched a formal inquiry into {entity.get('name')} due to gaps in transaction screening protocols.",
-                "url": "https://reuters.com"
-            })
-            articles_data.append({
-                "title": f"Internal whistleblowers flag questionable activity at {entity.get('name')}",
-                "source": "Bloomberg",
-                "source_tier": 1,
-                "credibility_score": 96,
-                "summary": f"Uncovered emails from corporate files detail transaction routing patterns designed to bypass standard KYC validation stages.",
-                "url": "https://bloomberg.com"
-            })
-            
+        
+        # 🌟 DYNAMIC FIX: Read the live processed articles payload from your backend tunnel response
+        articles_data = case.get("articles", [])
+        
         if articles_data:
             for art in articles_data:
-                render_article_card(art)
+                # Format payload keys to match the internal layout expectations of render_article_card
+                ui_card_payload = {
+                    "title": art.get("title", "Untitled Adverse Intelligence Event"),
+                    "source": art.get("source", "NEWS DATA STREAM"),
+                    "source_tier": art.get("source_tier", 1),
+                    "credibility_score": art.get("credibility_score", art.get("credibility", 95)),
+                    "summary": art.get("description", art.get("summary", "No textual snippet available.")),
+                    "url": art.get("url", "https://newsdata.io")
+                }
+                render_article_card(ui_card_payload)
         else:
-            st.info("No adverse media articles found for this entity.")
+            st.info("No live adverse media articles loaded for this entity yet. Run an ingestion query or verify your backend streaming configurations.")
             
     with tab_timeline:
         st.markdown("### Chronological Risk Timeline")
@@ -138,9 +136,13 @@ else:
             
             if submitted:
                 payload = {"status": status_opt, "recommendation": rec_opt, "notes": notes}
-                try:
+                
+                async def execute_case_update():
                     async with api_client:
                         await api_client.update_case(case_id, payload)
+                
+                try:
+                    asyncio.run(execute_case_update())
                     st.success("Case successfully updated and audit log appended.")
                     st.rerun()
                 except Exception as e:
